@@ -1,4 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
+from domain.chat.entities import Message
+from domain.chat.value_objects import MessageRole
 import os
 
 class MongoMemoryStore:
@@ -18,4 +20,11 @@ class MongoMemoryStore:
     async def get_recent_messages(self, session_id: str, limit: int = 10):
         cursor = self.collection.find({"session_id": session_id}).sort("_id", -1).limit(limit)
         results = await cursor.to_list(length=limit)
-        return list(reversed(results))
+
+        return [
+            Message(
+                role=MessageRole(doc["role"]),
+                content=doc["content"]
+            )
+            for doc in reversed(results)
+        ]

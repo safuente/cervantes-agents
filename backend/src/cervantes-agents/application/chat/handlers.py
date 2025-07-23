@@ -1,8 +1,10 @@
-from domain.chat.entities import Character, Conversation, Message
+from domain.chat.entities import Conversation, Message
 from domain.chat.value_objects import MessageRole
 from domain.chat.services import chat_with_character
+from domain.characters.historical_factory import HistoricalCharacterFactory
 from infrastructure.llm.openai_client import OpenAIClient
 from infrastructure.memory.mongo_memory_store import MongoMemoryStore
+
 
 class ChatApplicationService:
     def __init__(self, llm_client=None, memory_store=None):
@@ -10,35 +12,23 @@ class ChatApplicationService:
         self.memory_store = memory_store or MongoMemoryStore()
 
     async def handle_chat(self, session_id: str, character_id: str, user_message: str) -> str:
-        characters = {
-            "goya": Character(
-                id="goya",
-                name="Goya",
-                persona="Eres Francisco de Goya, un pintor español del siglo XVIII...",
-                description="Pintor de la corte y de lo grotesco"
-            )
-        }
+        # Get character
+        character = HistoricalCharacterFactory.get_character(character_id)
 
-        if character_id not in characters:
-            raise ValueError("Personaje no encontrado")
+        # Get short-term memory (past messages)
+        past_messages = await self.memory_store.get_recent_messages(session_id)
 
-        character = characters[character_id]
+        # Start conversation with persona as system prompt
+        history = [Message(role=MessageRole.SYSTEM, content=character.persona)] + past_messages
 
-        history_docs = await self.memory_store.get_recent_messages(session_id)
-        history = [
-            Message(role=MessageRole(doc["role"]), content=doc["content"])
-            for doc in history_docs
-        ]
-        history.append(Message(role=MessageRole.USER, content=user_message))
+        # Create conversation
+        conversation = Conversation(character=character, history=history)
 
-        conversation = Conversation(
-            character=character,
-            history=[Message(role=MessageRole.SYSTEM, content=character.persona)] + history
-        )
-
+        # Chat
         response = chat_with_character(conversation, user_message, self.llm_client)
 
-        await self.memory_store.save_message(session_id, "user", user_message)
-        await self.memory_store.save_message(session_id, "assistant", response)
+        # Store user + assistant messages in memory
+        await self.memory_store.save_message(session_id, MessageRole.USER.value, user_message)
+        await self.memory_store.save_message(session_id, MessageRole.ASSISTANT.value, response)
 
         return response
