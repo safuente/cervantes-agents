@@ -22,6 +22,7 @@ dependencies = [
     "ipykernel>=6.29.5",
     "pydantic>=2.10.6",
     "datasketch>=1.6.5",
+    "motor"
 ]
 
 [dependency-groups]
@@ -42,3 +43,5 @@ packages = ["src/cervantes-agents"]
 
 [tool.ruff]
 target-version = "py312"
+
+
